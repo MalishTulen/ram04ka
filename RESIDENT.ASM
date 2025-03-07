@@ -6,7 +6,7 @@ TITLE                  RESIDENT_RAMKA
 ;-------------------------------------------------------------------------------
 .model tiny
 .code
-.286
+.386
 org 100h
 
 
@@ -23,69 +23,116 @@ SCREEN_LENGTH 			equ 80d					;length of screen
 SCREEN_HIGHT  			equ 25d					;hight of screen
 ;FRAME_COLOR   			equ 00001100b       	;pink(rework as inputed)
 VIDEOSEG	  	        equ 0b800h	 			;BIOS segment
-CMD_INPUT	 	        equ 81h	 				;ip of cmd
 DEFAULT_COLOR			equ 07h
 
 Start:
-        cld                                     ;di++ instead of --
+        ;cld                                     ;di++ instead of --
         ;mov ax, VIDEOSEG                        ;ax = b800
         ;mov es, ax                              ;es = ax
         ;mov ah, 4ch                             ; ah = 4c
-        ;mov di, 5*80*2+40*2
+        mov di, 5*80*2+40*2
 
 
         xor ax, ax
         mov es, ax                              ;es = 0
         mov bx, 08h*4                           ;set bx as 9 int
+
         mov ax, es:[bx]                         ;ax = adress of 9 int
-        mov int08_old_offset, ax                        ;save old adress
+        mov int08_old_offset, ax                ;save old adress
         mov ax, es:[bx+2]                       ;ax = adress of 9 int segment
-        mov int08_old_segment, ax                        ;save old 9 int segment
+        mov int08_old_segment, ax               ;save old 9 int segment
 
         cli                                     ;turn off ints
-        mov es:[bx], offset New_int_08
+        mov word ptr es:[bx], offset New_int_08
 
-        mov ax, cs                                  ;ax = current segment
+        mov ax, cs                              ;ax = current segment
         mov es:[bx+2], ax                       ;9 int's segment set as current
         sti                                     ;turn back on ints
-        ;int 09h                                 ;call int 09h
+        ;int 09h                                ;call int 09h
 ;---------------------------------------------------------------------------------------
         xor ax, ax
         mov es, ax                              ;es = 0
         mov bx, 09h*4                           ;set bx as 9 int
+
         mov ax, es:[bx]                         ;ax = adress of 9 int
-        mov int09_old_offset, ax                        ;save old adress
+        mov int09_old_offset, ax                ;save old adress
         mov ax, es:[bx+2]                       ;ax = adress of 9 int segment
-        mov int09_old_segment, ax                        ;save old 9 int segment
+        mov int09_old_segment, ax               ;save old 9 int segment
 
         cli                                     ;turn off ints
-        mov es:[bx], offset New_int_09
-        mov ax, cs                                  ;ax = current segment
+        mov word ptr es:[bx], offset New_int_09
+        mov ax, cs                              ;ax = current segment
         mov es:[bx+2], ax                       ;9 int's segment set as current
         sti
 
-        mov ax, 4c00h
+		;int 09h
+        ;push 40
+        ;push 15
+        ;call make_frame
+        ;add sp, 4d
+
+        mov ax, 3100h
+        mov dx, offset EOP
+        shr dx, 4
+        inc dx
         int 21h
 
+
 New_int_08              proc
-                        int 03h
-                        push ax bx cx dx si di bp sp ds es      ;save registers
+                        push ax bx cx dx di si es ds      ;save registers
 
-                        mov ax, frame_on                      ;ax = value of frame_on
-                        cmp ax, 1                               ;if ax == 1 print_frame
-                        je @@print
-                        jmp @@exit1
-@@print:                ;push 10
-                        ;push 5
-                        ;call make_frame
-                        ;add sp, 4d
-						mov ah, 09h
-						mov dx, offset String
-						int 21h
+						push cs
+						pop ds
 
-@@exit1:                 ;in al, 61h              ;al = data from port 61
+						mov al, FRAME_FLAG
+                        cmp al, 1                         ;if ax == 1 print_frame
+                        jne @@exit1
+
+
+						push ax
+						push dx
+						push cx
+						push bx
+						push ax
+
+						mov ax, offset AX_INFO
+						push ax
+						call get_a_from_hex
+						add sp, 4d
+
+						mov ax, offset BX_INFO
+						push ax
+						call get_a_from_hex
+						add sp, 4d
+
+						mov ax, offset CX_INFO
+						push ax
+						call get_a_from_hex
+						add sp, 4d
+
+						mov ax, offset DX_INFO
+						push ax
+						call get_a_from_hex
+						add sp, 4d
+
+
+		               	push 17
+                        push 7
+                        call make_frame	 						;print frame
+                        add sp, 4d
+
+						pop ax
+
+
+
+						;xor ah, ah
+						;jmp @@exit1
+
+
+
+;@@res1:                 ;in al, 61h             ;al = data from port 61
                         ;mov ah, al              ;ah = al
-                        ;or al, 80h              ;включаем проверку на четность и
+                        ;or al, 80h              ;???????? ???????? ?? ???????? ?
                         ;out 61h, al             ;port 61 = al
                         ;mov al, ah
                         ;out 61h, al
@@ -93,42 +140,158 @@ New_int_08              proc
                         ;mov al, 20h
                         ;out 20h, al
 
-                        pop es ds sp bp di si dx cx bx ax
-                        cli
-                        mov ax, int08_old_offset
-                        mov es:[bx], ax
-                        mov ax, int08_old_segment
-                        mov es:[bx+2], ax
-                        sti
+@@exit1:
+
+                        pop ds es si di dx cx bx ax
                         db 0eah
-int08_old_offset                dw 0
-int08_old_segment               dw 0
+int08_old_offset        dw 0
+int08_old_segment       dw 0
                         endp
 ;---------------------------------------------------------------------------------
 New_int_09              proc
                         ;int 03h
-                        push ax bx es
+                        push ax bx cx dx di si es ds      ;save registers
+						;mov bx, 5*80*2+40*2
+						;mov cx, VIDEOSEG
+						;mov es, cx
+						;mov byte ptr es:[bx], al
+						;mov FRAME_FLAG, al
 
+						push cs
+						pop ds
                         in al, 60h
 
-                        mov bh, 16h
-                        cmp ah, bh
-                        je @@changer
-                        jmp @@exit2
+                        mov ah, 13h
+                        cmp al, ah
+                        jne @@exit2
 
-@@changer:              mov frame_on, 1
+		                ;xor FRAME_FLAG, FRAME_FLAG
+					  	cmp FRAME_FLAG, 1
+						jne @@fr_fl_was_0
 
-@@exit2:                pop es bx ax
-                        cli
-                        mov ax, int08_old_offset
-                        mov es:[bx], ax
-                        mov ax, int08_old_segment
-                        mov es:[bx+2], ax
-                        sti
+
+						mov ax, VIDEOSEG
+						mov es, ax
+						xor di, di	 					;if FRAME_FLAG == 1 and 'r' was pressed second time load the SCREENSHOT
+						mov ax, cs
+						mov ds, ax
+						lea si, [SCREENSHOT]
+
+						mov cx, 4000d
+@@loader:				lodsb
+						stosb
+						loop @@loader
+
+						mov FRAME_FLAG, 0
+						jmp @@exit2
+
+
+@@fr_fl_was_0:
+						mov al, 1
+						mov FRAME_FLAG, al
+						mov ax, VIDEOSEG
+						mov ds, ax
+						xor si, si	 							;if FRAME_FLAG != 1 ( ==0 ) save in SCREENSHOT
+						mov ax, cs
+						mov es, ax
+						lea di, [SCREENSHOT]
+						mov cx, 4000d
+@@saver:				lodsb
+						stosb
+						loop @@saver
+
+@@exit2:
+                        pop ds es si di dx cx bx ax
+
                         db 0eah
-int09_old_offset                dw 0
-int09_old_segment               dw 0
+int09_old_offset        dw 0
+int09_old_segment       dw 0
                         endp
+
+
+;-------------------------------------------------------------------------------
+;get_a_from_hex		make symbols from 4 number input
+;-------------------------------------------------------------------------------
+;Entry: 4 numbers
+;Change reg:
+;-------------------------------------------------------------------------------
+get_a_from_hex			proc
+						push bp
+						mov bp, sp
+						mov bx, [bp+4d]		;bx= ptr to str
+						mov ax, [bp+6d]     ;ax=4 numbers
+						add bx, 5
+						mov di, bx
+						push ax
+						mov ax, cs
+						mov es, ax
+						pop ax
+
+													;0110 1001 1010 1010 rol cx, 4   1001 1010 1010 0110  6
+						push ax
+						push ax
+						push ax
+						push ax
+						pop cx
+
+						rol cx, 12
+						and ch, 00001111b
+						call from_num_or_let_to_a
+						mov al, ch
+						stosb
+
+						pop cx
+						;rol cx, 4
+						and ch, 00001111b
+						call from_num_or_let_to_a
+						mov al, ch
+						stosb
+
+						pop cx
+						rol cx, 4
+						and ch, 00001111b
+						call from_num_or_let_to_a
+						mov al, ch
+						stosb
+
+						pop cx
+						rol cx, 8
+						and ch, 00001111b
+						call from_num_or_let_to_a
+						mov al, ch
+						stosb
+
+						mov sp, bp
+						pop bp
+						ret
+						endp
+
+;-------------------------------------------------------------------------------
+;from_num_or_let_to_a
+;-------------------------------------------------------------------------------
+from_num_or_let_to_a	proc
+
+						xor ah, ah
+						cmp ch, ah
+						jb EOP
+
+						mov ah, 15
+						cmp ch, ah
+						ja EOP
+						mov ah, 9
+						cmp ch, ah
+						ja @@letter
+						jmp @@number
+
+@@number: 				add ch, 30h
+						jmp @@exit3
+
+@@letter:				add ch, 37h
+						jmp @@exit3
+
+@@exit3:
+						ret
+						endp
 ;-------------------------------------------------------------------------------
 ;make_frame:	    plays animation of opening a message
 ;-------------------------------------------------------------------------------
@@ -160,7 +323,7 @@ make_frame	proc
 		;pop ax
 		call print_frame
 		;add sp, 4d
-	        mov sp, bp
+	    mov sp, bp
 		pop bp
 		ret
 		endp
@@ -172,56 +335,155 @@ make_frame	proc
 ;BALL TORTURE REGISTERS:   BX, DX, SI, BP, SP
 ;-------------------------------------------------------------------------------
 print_frame	proc
-		push ax				;save ax = length
-		push bx	 			;save bx = hight
-		;push dx	 			;save dx = type of frame
-		call get_location	;es = videoseg, bx = location
-		;pop dx	 			;return dx
-		pop bx	 			;return bx
-		pop ax				;return ax
-		;push ax
-		;push bx
-		;push cx
+			push ax				;save ax = length
+			push bx	 			;save bx = hight
+			;push dx	 			;save dx = type of frame
 
-        	lea si, [TYPE_OF_FRAME]
-		push ax
-		push bx
-		push [si]   		;0c9h left corner
-		push [si+1] 		;0cdh between corners
-		push [si+2] 		;0bbh right corner
-		call make_string
-		add sp, 6d		;set sp correctly
-		pop bx
-		pop ax
-		;pop cx
-		;pop bx
-		;pop ax
+			;call get_location	;es = videoseg, bx = location
+			mov ax, VIDEOSEG
+			mov es, ax
+			mov di, 2*80*2+55*2
+			;pop dx	 			;return dx
+			pop bx	 			;return bx
+			pop ax				;return ax
+			;push ax
+			;push bx
+			;push cx
 
-		mov dx, bx		; -2 because of corners
-		sub dx, 2d
+			lea si, [TYPE_OF_FRAME]
+			push ax
+			push bx
+			push word ptr [si]   		;0c9h left corner
+			push word ptr [si+1] 		;0cdh between corners
+			push word ptr [si+2] 		;0bbh right corner
+			call make_string
+			add sp, 6d		;set sp correctly
+			pop bx
+			pop ax
+			;pop cx
+			;pop bx
+			;pop ax
+
+			mov dx, bx		; -2 because of corners
+			sub dx, 2d
 
 @@string_printer:			;saving cycles amount
-		;push ax
-		;push bx
-		;push cx
-		push ax
-		push [si+3]		;0bah left border
-		push [si+4]		;0h   middle space
-		push [si+5]		;0bah right border
-		call make_string
-		add sp, 6d		;set sp correctly
-		pop ax
-		;pop cx
-		;pop bx
-		;pop ax
-		dec dx
-		cmp dx, 0		;cycle
+			;push ax
+			;push bx
+			;push cx
+			push ax
+			push bx
+			push word ptr [si+3]		;0bah left border
+			push word ptr [si+4]		;0h   middle space
+			push word ptr [si+5]		;0bah right border
+			call make_string
+			add sp, 6d		;set sp correctly
+			pop bx
+			pop ax
+			;pop cx
+			;pop bx
+			;pop ax
+
+
+			dec dx
+
+			push ax bx cx dx di si es ds
+			call find_gap
+			sub di, ax
+
+			;std
+			cmp dx, 4
+			jne @@check2
+			mov ax, VIDEOSEG ; copypaste
+			mov es, ax
+			sub di, 12*2
+			mov ax, cs
+			mov ds, ax
+			mov si, offset AX_INFO
+			mov cx, 9
+@@ax_printer:
+			lodsb
+			mov ah, DEFAULT_COLOR
+			stosw
+			Loop @@ax_printer
+
+			;add di, 10
+
+			jmp @@exit
+
+
+@@check2:
+			cmp dx, 3
+			jne @@check3
+
+			mov ax, VIDEOSEG
+			mov es, ax
+			sub di, 12*2
+			mov ax, cs
+			mov ds, ax
+			mov si, offset BX_INFO
+			mov cx, 9
+@@bx_printer:
+			lodsb
+			mov ah, DEFAULT_COLOR
+			stosw
+			Loop @@ax_printer
+			;add di, 10
+
+			jmp @@exit
+
+
+@@check3:
+			cmp dx, 2
+			jne @@check4
+
+			mov ax, VIDEOSEG
+			mov es, ax
+			sub di, 12*2
+			mov ax, cs
+			mov ds, ax
+			mov si, offset CX_INFO
+			mov cx, 9
+@@cx_printer:
+			lodsb
+			mov ah, DEFAULT_COLOR
+			stosw
+			Loop @@ax_printer
+			;add di, 10
+
+
+			jmp @@exit
+
+@@check4:
+			cmp dx, 1
+			jne @@exit
+
+			mov ax, VIDEOSEG
+			mov es, ax
+			sub di,12*2
+			mov ax, cs
+			mov ds, ax
+			mov si, offset DX_INFO
+			mov cx, 9
+@@Dx_printer:
+			lodsb
+			mov ah, DEFAULT_COLOR
+			stosw
+			Loop @@ax_printer
+			;add di, 10
+
+
+
+@@exit:		cld
+			pop ds es si di dx cx bx ax
+
+			cmp dx, 0		;cycle
 		ja @@string_printer
 
 		push ax
-		push [si+6]		;0c8h left down corner
-		push [si+7]		;0cdh down border
-		push [si+8]		;0bch right down corner
+		push word ptr [si+6]		;0c8h left down corner
+		push word ptr [si+7]		;0cdh down border
+		push word ptr [si+8]		;0bch right down corner
 		call make_string
 		add sp, 6d		;set sp correctly
 		pop ax
@@ -345,9 +607,9 @@ make_string	proc
 		;pop cx
 		xor ax, ax
 		mov ax, [bp+4d]		;ax = third inputed symbol
+
 		push ax
 		push DEFAULT_COLOR
-
  		call symbol_printer
 		add sp, 4d
 
@@ -363,6 +625,12 @@ make_string	proc
 
 String          				db 'Start1488$'
 TYPE_OF_FRAME   				db 'ЙН»є єИНј'
-frame_on       					dw 0
-end             Start
+SCREENSHOT 						db 4000 dup (' ')
+FRAME_FLAG       			    db 0
 
+AX_INFO	 						db 9 dup ('AX =     ')
+BX_INFO	 						db 9 dup ('BX =     ')
+CX_INFO	 						db 9 dup ('CX =     ')
+DX_INFO	 						db 9 dup ('DX =     ')
+EOP:
+end             		Start
